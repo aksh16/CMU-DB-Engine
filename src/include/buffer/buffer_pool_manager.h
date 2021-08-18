@@ -171,6 +171,6 @@ class BufferPoolManager {
   // /*Mapping offset of array pages with page id */
   // std::unordered_map<page_id_t,int> offset_map;
   /** Keeps track of data in page. Used to update dirty bit of page if data changes */
-  std::unordered_map<page_id_t,std::string> page_data_table;
+  // std::unordered_map<page_id_t,std::string> page_data_table;
 };
 }  // namespace bustub

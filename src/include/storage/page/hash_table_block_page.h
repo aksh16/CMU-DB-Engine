@@ -92,13 +92,27 @@ class HashTableBlockPage {
    * @return true if the index is readable, false otherwise
    */
   bool IsReadable(slot_offset_t bucket_ind) const;
+  /**
+   * @return the page ID of this page
+   */
+  page_id_t GetPageId() const;
+
+  /**
+   * Sets the page ID of this page
+   *
+   * @param page_id the page id for the page id field to be set to
+   */
+  void SetPageId(page_id_t page_id);
 
  private:
-  std::atomic_char occupied_[(BLOCK_ARRAY_SIZE - 1) / 8 + 1];
+	/*If a slot has been occupied once before but now vacant still mark it as 1.*/
+  	std::atomic_char occupied_[(BLOCK_ARRAY_SIZE - 1) / 8 + 1] = {0};
 
-  // 0 if tombstone/brand new (never occupied), 1 otherwise.
-  std::atomic_char readable_[(BLOCK_ARRAY_SIZE - 1) / 8 + 1];
-  MappingType array_[0];
+  	// 0 if tombstone/brand new (never occupied), 1 otherwise.
+  	std::atomic_char readable_[(BLOCK_ARRAY_SIZE - 1) / 8 + 1] = {0};
+  	MappingType array_[BLOCK_ARRAY_SIZE];
+  	// std::vector<MappingType> v;
+	__attribute__((unused)) page_id_t page_id_;
 };
 
 }  // namespace bustub

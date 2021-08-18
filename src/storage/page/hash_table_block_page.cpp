@@ -12,36 +12,71 @@
 
 #include "storage/page/hash_table_block_page.h"
 #include "storage/index/generic_key.h"
+#include "common/logger.h"
 
 namespace bustub {
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 KeyType HASH_TABLE_BLOCK_TYPE::KeyAt(slot_offset_t bucket_ind) const {
-  return {};
+	KeyType key_at_ind;
+	key_at_ind = array_[bucket_ind].first;
+	return key_at_ind;
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 ValueType HASH_TABLE_BLOCK_TYPE::ValueAt(slot_offset_t bucket_ind) const {
-  return {};
+	ValueType value_at_ind;
+	value_at_ind = array_[bucket_ind].second;
+	return value_at_ind;
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 bool HASH_TABLE_BLOCK_TYPE::Insert(slot_offset_t bucket_ind, const KeyType &key, const ValueType &value) {
-  return false;
+	if(this->IsReadable(bucket_ind)){
+		return false;
+	}
+	else{
+		array_[bucket_ind].first = key;
+		array_[bucket_ind].second = value;
+		occupied_[bucket_ind] = 1;
+		readable_[bucket_ind] = 1;
+		return true;
+	}
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
-void HASH_TABLE_BLOCK_TYPE::Remove(slot_offset_t bucket_ind) {}
+void HASH_TABLE_BLOCK_TYPE::Remove(slot_offset_t bucket_ind) {
+	if(this->IsReadable(bucket_ind)){
+		readable_[bucket_ind] = 0;
+	}
+}
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 bool HASH_TABLE_BLOCK_TYPE::IsOccupied(slot_offset_t bucket_ind) const {
-  return false;
+	if(occupied_[bucket_ind] == 1)
+		return true;
+	else
+		return false;
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 bool HASH_TABLE_BLOCK_TYPE::IsReadable(slot_offset_t bucket_ind) const {
-  return false;
+	if(readable_[bucket_ind] == 1)
+		return true;
+	else
+		return false;
 }
+
+template <typename KeyType, typename ValueType, typename KeyComparator>
+void HASH_TABLE_BLOCK_TYPE::SetPageId(bustub::page_id_t page_id) {
+	this->page_id_ = page_id;
+}
+
+template <typename KeyType, typename ValueType, typename KeyComparator>
+page_id_t HASH_TABLE_BLOCK_TYPE::GetPageId() const {
+	return page_id_;
+}
+
 
 // DO NOT REMOVE ANYTHING BELOW THIS LINE
 template class HashTableBlockPage<int, int, IntComparator>;

@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <vector>
 #include <cassert>
 #include <climits>
 #include <cstdlib>
@@ -95,6 +96,8 @@ class HashTableHeaderPage {
   __attribute__((unused)) page_id_t page_id_;
   __attribute__((unused)) size_t next_ind_;
   __attribute__((unused)) page_id_t block_page_ids_[0];
+  std::vector<page_id_t> block_pageId_list_;
+  size_t block_counter_ = 0;
 };
 
 }  // namespace bustub

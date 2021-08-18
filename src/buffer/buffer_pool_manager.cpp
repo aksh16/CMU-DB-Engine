@@ -16,7 +16,7 @@
 #include <unordered_map>
 
 /*Buffer pool holds the pages in the main memory.
-Page table and page data table are used to manage pages currently in buffer pool.
+Page table is used to manage pages currently in buffer pool.
 Frames are the location of pages and pages are what actually stores the content
 Pages are in a continuous array which can be indexed via frame id.*/
 
@@ -74,41 +74,31 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
 		char str_page[PAGE_SIZE];
 		disk_manager_->ReadPage(page_id,str_page);
 		std::strncpy(ref_page->data_,str_page,PAGE_SIZE);
-		std::string str(str_page);
-		page_data_table[page_id] = str;
 		page_table_[page_id] = page_frame;
+		ref_page->is_dirty_ = true;
 		return ref_page;
 	}
 
 	/*Or else get page from Replacer*/
 	else if(replacer_->Victim(&page_frame)){
 		LOG_INFO("Page #%d found in replacer", page_id);
+		/*Pin the page frame and page*/
 		Page *ref_page = &pages_[page_frame];
 		page_id_t old_pid = ref_page->GetPageId();
+		replacer_->Pin(page_frame);
+		ref_page->pin_count_=1;
 		char str_page[PAGE_SIZE];
 		/*If page is dirty, flush it*/
 		if(ref_page->IsDirty()){
-			// std::strncpy(str_page,ref_page->GetData(),PAGE_SIZE);
-			// disk_manager_->WritePage(old_pid,str_page);
-			bool flushed = FlushPageImpl(old_pid);
-			if(flushed){
-				page_table_.erase(old_pid);
-				page_data_table.erase(old_pid);
-			}
+			FlushPageImpl(old_pid);
 		}
-		else{
-			page_table_.erase(old_pid);
-			page_data_table.erase(old_pid);
-		}
-		/*Pin the page, add new details to the page and pin the corresponding frame*/
+		page_table_.erase(old_pid);
+		/*Add new details to the page*/
 		ref_page->page_id_ = page_id;
-		replacer_->Pin(page_frame);
-		ref_page->pin_count_=1;
 		disk_manager_->ReadPage(page_id,str_page);
 		std::strncpy(ref_page->data_,str_page,PAGE_SIZE);
-		std::string str(str_page);
-		page_data_table[page_id] = str;
 		page_table_[page_id] = page_frame;
+		ref_page->is_dirty_ = true;
 		return ref_page;
 	}
 
@@ -118,24 +108,18 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
 bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
 	LOG_INFO("Page to be unpinned #%d",page_id);
 	if(page_table_.find(page_id) != page_table_.end()){
-		/*If page is pinned by one or more processes*/
 		frame_id_t page_frame = page_table_[page_id];
 		Page *ref_page = &pages_[page_frame];
+		/*Check if page is pinned by one or more processes*/
 		if(ref_page->GetPinCount() >= 1){
 			ref_page->pin_count_ = ref_page->pin_count_ - 1;
-			char str_page[PAGE_SIZE];
 			/*Check if page is dirty*/
-			std::strncpy(str_page,ref_page->GetData(),PAGE_SIZE);
-			std::string str_pg(str_page);
-			LOG_INFO("Data in page #%d is %s",page_id,str_pg.c_str());
-			if(str_pg.compare(page_data_table[page_id]) != 0){
+			if(is_dirty == true){
 				LOG_INFO("Page #%d is dirty", page_id);
-				is_dirty=true;
 				ref_page->is_dirty_ = true;
 			}
 			else{
 				LOG_INFO("Page #%d is not dirty", page_id);
-				is_dirty=false;
 				ref_page->is_dirty_ = false;
 			}
 			/*If page is no longer in use, remove it from buffer pool and
@@ -147,12 +131,10 @@ bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
 			return true;
 		}
 		else{
-			is_dirty=false;
 			return false;
 		}
 	}
 	if(is_dirty){}
-	is_dirty=false;
 	return false;
 }
 
@@ -177,28 +159,30 @@ Page *BufferPoolManager::NewPageImpl(page_id_t *page_id) {
   	// 2.   Pick a victim page P from either the free list or the replacer. Always pick from the free list first.
   	// 3.   Update P's metadata, zero out memory and add P to the page table.
   	// 4.   Set the page ID output parameter. Return a pointer to P.
-	bool flag = 0;
+	int flag = 0;
 	frame_id_t page_frame;
 	page_id_t pid = disk_manager_->AllocatePage();
 	LOG_INFO("New page #%d from replacer",pid);
 	/*Check if there is space for new page in buffer pool*/
-	for(auto it = page_table_.begin(); it != page_table_.end(); it++){
-		Page *ref_page = &pages_[it->second];
-		if(ref_page->GetPinCount() < 1){
-			// LOG_INFO("Flag0");
-			flag = 0;
-			break;
+	if(page_table_.size() == pool_size_){
+		for(auto it = page_table_.begin(); it != page_table_.end(); it++){
+			Page *ref_page = &pages_[it->second];
+			if(ref_page->GetPinCount() < 1){
+				// LOG_INFO("Flag0");
+				flag = 0;
+				break;
+			}
+			else{
+				// LOG_INFO("Flag1");
+				flag = 1;
+				continue;
+			}
 		}
-		else{
-			// LOG_INFO("Flag1");
-			flag = 1;
-			continue;
+		/*If there is no space, return nullptr*/
+		if(flag == 1){
+			LOG_INFO("NewPageImpl::No space for new page");
+			return nullptr;
 		}
-	}
-	/*If there is no space, return nullptr*/
-	if(flag == 1 && page_table_.size() == pool_size_){
-		LOG_INFO("NewPageImpl::No space for new page");
-		return nullptr;
 	}
 	/*Get page from free list*/
 	if(!free_list_.empty()){
@@ -212,11 +196,9 @@ Page *BufferPoolManager::NewPageImpl(page_id_t *page_id) {
 		ref_page->pin_count_ = 1;
 		ref_page->ResetMemory();
 		ref_page->is_dirty_ = false;
-		/*Put the page in page table and page data table
-		Insert empty string for page data table*/
+		/*Put the page in page table */
 		replacer_->Pin(page_frame);
 		page_table_[pid] = page_frame;
-		page_data_table[*page_id] = "";
 		return ref_page;
 	}
 	/*Or else get page from Replacer*/
@@ -226,25 +208,16 @@ Page *BufferPoolManager::NewPageImpl(page_id_t *page_id) {
 		page_id_t old_pid = ref_page->page_id_;
 		/*If page is dirty, flush it*/
 		if(ref_page->IsDirty()){
-			bool flushed = FlushPageImpl(old_pid);
+			FlushPageImpl(old_pid);
 			LOG_INFO("Page #%d, frame #%d", old_pid,page_frame);
-			if(flushed){
-				page_table_.erase(old_pid);
-				page_data_table.erase(old_pid);
-			}
 		}
-		else{
-			page_table_.erase(old_pid);
-			page_data_table.erase(old_pid);
-		}
+		page_table_.erase(old_pid);
 		/*Set parameters for the page*/
 		ref_page->pin_count_ = 1;
 		ref_page->page_id_ = pid;
 		ref_page->ResetMemory();
 		ref_page->is_dirty_ = false;
-		/*Put the page in page table and page data table
-		Insert empty string for page data table*/
-		page_data_table[*page_id] = "";
+		/*Put the page in page table*/
 		page_table_[pid] = page_frame;
 		replacer_->Pin(page_frame);
 		return ref_page;
@@ -265,7 +238,6 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
 			LOG_INFO("Deleting page #%d",page_id);
 			ref_page->ResetMemory();
 			page_table_.erase(page_id);
-			page_data_table.erase(page_id);
 			free_list_.push_back(page_frame);
 			return true;
 		}

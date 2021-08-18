@@ -87,16 +87,24 @@ class LinearProbeHashTable : public HashTable<KeyType, ValueType, KeyComparator>
   size_t GetSize();
 
  private:
-  // member variable
-  page_id_t header_page_id_;
-  BufferPoolManager *buffer_pool_manager_;
-  KeyComparator comparator_;
+	// member variable
+	page_id_t header_page_id_;
+	BufferPoolManager *buffer_pool_manager_;
+	KeyComparator comparator_;
+	size_t num_buckets_;
 
-  // Readers includes inserts and removes, writer is only resize
-  ReaderWriterLatch table_latch_;
+	// Readers includes inserts and removes, writer is only resize
+	ReaderWriterLatch table_latch_;
 
-  // Hash function
-  HashFunction<KeyType> hash_fn_;
+	// Hash function
+	HashFunction<KeyType> hash_fn_;
+
+	/*Num slots represent the number of block pages needed*/
+	size_t num_slots_;
+
+	HashTableHeaderPage *header_page_;
+
+
 };
 
 }  // namespace bustub
